@@ -1,0 +1,367 @@
+{
+   "apiVersion": "v1",
+   "kind": "Template",
+   "metadata": {
+	"name": "ckan-template",
+	"annotations": {
+		"description": "CKAN template integrated with PostgreSQL and Solr",
+		"iconClass": "icon-shadowman",
+		"tag": "postgresql, opendata"
+	}
+   },
+   "objects": [
+        {
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "ckan-latest"
+            },
+            "spec": {
+                "dockerImageRepository": "dmartin/ckan",
+                "tags": [
+                    {
+                        "name": "latest",
+                        "annotations": {
+                            "description": "ckan image",
+			    "iconClass": "icon-shadowman"
+                        }
+                    }
+                ]
+            }
+        },
+	{
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "ckan-postgresql"
+            },
+            "spec": {
+                "dockerImageRepository": "ckan/postgresql",
+                "tags": [
+                    {
+                        "name": "latest",
+                        "annotations": {
+                            "description": "ckan postgresql image",
+			    "iconClass": "icon-postgresql"
+                        }
+                    }
+                ]
+            }
+        },
+	{
+            "kind": "ImageStream",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "ckan-solr",
+		"tags": [
+			{
+				"name": "latest"
+			}
+		]
+            },
+            "spec": {
+                "dockerImageRepository": "dmartin/solr",
+                "tags": [
+                    {
+                        "name": "latest",
+                        "annotations": {
+                            "description": "ckan solr image",
+			    "iconClass": "icon-shadowman"
+                        }
+                    }
+                ]
+            }
+        },
+	{
+		"apiVersion": "v1",
+		"kind": "Service",
+		"metadata": {
+			"name": "${APP}-http",
+			"annotations": {
+				"description": "${APP} http port"
+			}
+		},
+		"spec": {
+			"selector": {
+				"deploymentConfig": "${APP}"
+			},
+			"ports": [
+				{
+					"port": 80,
+					"targetPort": 80
+				}
+			]
+		}
+	},
+	{
+		"apiVersion": "v1",
+		"kind": "Service",
+		"metadata": {
+			"name": "${APP}-db-port",
+			"annotations": {
+				"description": "${APP} postgresql port"
+			}
+		},
+		"spec": {
+			"selector": {
+				"deploymentConfig": "${APP}-postgresql"
+			},
+			"ports": [
+				{
+					"port": 5432,
+					"targetPort": 5432
+				}
+			]
+		}
+	},
+	{
+		"apiVersion": "v1",
+		"kind": "Service",
+		"metadata": {
+			"name": "${APP}-solr-port",
+			"annotations": {
+				"description": "${APP} solr port"
+			}
+		},
+		"spec": {
+			"selector": {
+				"deploymentConfig": "${APP}-solr"
+			},
+			"ports": [
+				{
+					"port": 8983,
+					"targetPort": 8983
+				}
+			]
+		}
+	},
+	{
+		"apiVersion": "v1",
+		"kind": "Route",
+		"metadata": {
+			"name": "${APP}-http-route"
+		},
+		"spec":{
+			"host": "${APP_HOSTNAME}",
+			"to": {
+				"kind": "Service",
+				"name": "${APP}-http"
+			}
+		}
+	},
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APP}",
+                "labels": {
+                    "application": "${APP}"
+                }
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Rolling"
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "${APP}"
+                            ],
+                            "from": {
+                                "kind": "ImageStream",
+                                "name": "ckan-latest"
+                            }
+                        }
+                    }
+                ],
+                "replicas": 1,
+                "selector": {
+                    "application": "${APP}"
+                },
+                "template": {
+                    "metadata": {
+                        "name": "${APP}",
+                        "labels": {
+                            "deploymentConfig": "${APP}",
+                            "application": "${APP}"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "${APP}",
+                                "image": "ckan-latest",
+                                "ports": [
+                                    {
+                                        "containerPort": 80,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+                                "env": [
+                                    {
+                                        "name": "DATABASE_URL",
+                                        "value": "postgresql://ckan:ckan@${APP}-db-port:5432/ckan"
+                                    },
+				    {
+					"name": "SOLR_URL",
+					"value": "http://${APP}-solr-port:8983/solr/ckan"
+				    },
+				    {
+					"name": "CKAN_URL",
+					"value": "http://${APP_HOSTNAME}"	
+				    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APP}-postgresql",
+                "labels": {
+                    "application": "${APP}-postgresql"
+                }
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Rolling"
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "${APP}-postgresql"
+                            ],
+                            "from": {
+                                "kind": "ImageStream",
+                                "name": "ckan-postgresql"
+                            }
+                        }
+                    }
+                ],
+                "replicas": 1,
+                "selector": {
+                    "application": "${APP}-postgresql"
+                },
+                "template": {
+                    "metadata": {
+                        "name": "${APP}-postgresql",
+                        "labels": {
+                            "deploymentConfig": "${APP}-postgresql",
+                            "application": "${APP}-postgresql"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "${APP}-postgresql",
+                                "image": "ckan-postgresql",
+                                "ports": [
+                                    {
+                                        "containerPort": 5432,
+                                        "protocol": "TCP"
+                                    }
+                                ],
+				"env": [
+					{
+						"name": "POSTGRESQL_USER",
+						"value": "ckan"
+					},
+					{
+						"name": "POSTGRESQL_PASS",
+						"value": "ckan"
+					},
+					{
+						"name": "POSTGESQL_DB",
+						"value": "ckan"
+					}
+				]
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "kind": "DeploymentConfig",
+            "apiVersion": "v1",
+            "metadata": {
+                "name": "${APP}-solr",
+                "labels": {
+                    "application": "${APP}-solr"
+                }
+            },
+            "spec": {
+                "strategy": {
+                    "type": "Rolling"
+                },
+                "triggers": [
+                    {
+                        "type": "ImageChange",
+                        "imageChangeParams": {
+                            "automatic": true,
+                            "containerNames": [
+                                "${APP}-solr"
+                            ],
+                            "from": {
+                                "kind": "ImageStream",
+                                "name": "ckan-solr"
+                            }
+                        }
+                    }
+                ],
+                "replicas": 1,
+                "selector": {
+                    "application": "${APP}-solr"
+                },
+                "template": {
+                    "metadata": {
+                        "name": "${APP}-solr",
+                        "labels": {
+                            "deploymentConfig": "${APP}-solr",
+                            "application": "${APP}-solr"
+                        }
+                    },
+                    "spec": {
+                        "containers": [
+                            {
+                                "name": "${APP}-solr",
+                                "image": "ckan-solr",
+                                "ports": [
+                                    {
+                                        "containerPort": 8983,
+                                        "protocol": "TCP"
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+   ],
+   "parameters": [
+   	{
+		"description": "The application name, base for all deployments and connectivity",
+		"name": "APP",
+		"value": "ckan-app"
+	},
+	{
+		"description": "The application hostname, if not defined OpenShift default will be assumed",
+		"name": "APP_HOSTNAME",
+		"value": "ckan-app-dave.master.labs.com"
+	}
+   ],
+   "labels": {
+   	"template": "ckan-template"
+   }
+}
